@@ -7,10 +7,11 @@ import pandas as pd
 import hashlib
 
 # Database setup
-DATABASE_URL = os.getenv('DATABASE_URL')
+DATABASE_URL = os.getenv('DATABASE_URL', 'sqlite:///mental_health.db')
 engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
+Base.metadata.create_all(bind=engine)
 
 class User(Base):
     __tablename__ = "users"

@@ -3,3 +3,6 @@ plotly
 numpy
 pandas
 pdfplumber
+PyPDF2
+re
+pytesseract

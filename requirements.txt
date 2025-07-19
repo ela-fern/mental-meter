@@ -5,3 +5,4 @@ pandas
 pdfplumber
 PyPDF2
 pytesseract
+sqlalchemy

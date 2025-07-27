@@ -7,11 +7,10 @@ import pandas as pd
 import hashlib
 
 # Database setup
-DATABASE_URL = os.getenv('DATABASE_URL', 'sqlite:///mental_health.db')
+DATABASE_URL = os.getenv('DATABASE_URL')
 engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
-Base.metadata.create_all(bind=engine)
 
 class User(Base):
     __tablename__ = "users"
@@ -36,7 +35,7 @@ class MentalHealthEntry(Base):
     # Relationship to user
     user = relationship("User", back_populates="entries")
     
-    # PHQ-9 symptoms (9 columns)
+    # PHQ-9 symptoms (9 columns) - True: symptom present today, False: symptom not present
     phq9_0 = Column(Boolean, default=False)  # Little interest or pleasure
     phq9_1 = Column(Boolean, default=False)  # Feeling down, depressed
     phq9_2 = Column(Boolean, default=False)  # Sleep problems
@@ -47,7 +46,7 @@ class MentalHealthEntry(Base):
     phq9_7 = Column(Boolean, default=False)  # Moving slowly or restless
     phq9_8 = Column(Boolean, default=False)  # Thoughts of death
     
-    # GAD-7 symptoms (7 columns)
+    # GAD-7 symptoms (7 columns) - True: symptom present today, False: symptom not present
     gad7_0 = Column(Boolean, default=False)  # Feeling nervous
     gad7_1 = Column(Boolean, default=False)  # Can't stop worrying
     gad7_2 = Column(Boolean, default=False)  # Worrying too much
@@ -76,36 +75,36 @@ class DatabaseManager:
         return hashlib.sha256(password.encode()).hexdigest()
     
     def create_user(self, username, password):
-        """Create a new user"""
+        """Create a new user and return success status"""
         session = self.get_session()
         try:
             # Check if user already exists
             existing_user = session.query(User).filter(User.username == username).first()
             if existing_user:
-                return False, "Username already exists"
+                return False
             
             # Create new user
             password_hash = self.hash_password(password)
             new_user = User(username=username, password_hash=password_hash)
             session.add(new_user)
             session.commit()
-            return True, "User created successfully"
+            return True
         except Exception as e:
             session.rollback()
-            return False, f"Error creating user: {str(e)}"
+            return False
         finally:
             session.close()
     
     def authenticate_user(self, username, password):
-        """Authenticate a user"""
+        """Authenticate a user and return user_id if successful"""
         session = self.get_session()
         try:
             user = session.query(User).filter(User.username == username).first()
             if user and user.password_hash == self.hash_password(password):
-                return True, user.id
-            return False, None
+                return user.id  # Return user_id directly
+            return None  # Return None if authentication fails
         except Exception as e:
-            return False, None
+            return None
         finally:
             session.close()
     
@@ -113,7 +112,7 @@ class DatabaseManager:
         """Set the current user ID"""
         self.user_id = user_id
     
-    def save_daily_entry(self, date, responses):
+    def save_daily_entry(self, date, phq9_responses, gad7_responses):
         """Save or update a daily entry for the current user"""
         if not self.user_id:
             raise ValueError("No user logged in")
@@ -128,9 +127,16 @@ class DatabaseManager:
             
             if existing_entry:
                 # Update existing entry
-                for key, value in responses.items():
-                    if key != 'date' and hasattr(existing_entry, key):
-                        setattr(existing_entry, key, value)
+                # Update PHQ-9 responses
+                for i in range(9):
+                    key = f'phq9_{i}'
+                    setattr(existing_entry, key, phq9_responses[i] if i < len(phq9_responses) else False)
+                
+                # Update GAD-7 responses
+                for i in range(7):
+                    key = f'gad7_{i}'
+                    setattr(existing_entry, key, gad7_responses[i] if i < len(gad7_responses) else False)
+                
                 existing_entry.updated_at = datetime.utcnow()
                 entry = existing_entry
             else:
@@ -140,22 +146,22 @@ class DatabaseManager:
                 # Add PHQ-9 responses
                 for i in range(9):
                     key = f'phq9_{i}'
-                    entry_data[key] = responses.get(key, False)
+                    entry_data[key] = phq9_responses[i] if i < len(phq9_responses) else False
                 
                 # Add GAD-7 responses
                 for i in range(7):
                     key = f'gad7_{i}'
-                    entry_data[key] = responses.get(key, False)
+                    entry_data[key] = gad7_responses[i] if i < len(gad7_responses) else False
                 
                 entry = MentalHealthEntry(**entry_data)
                 session.add(entry)
             
             session.commit()
-            return entry
+            return True
         
         except Exception as e:
             session.rollback()
-            raise e
+            return False
         finally:
             session.close()
     
@@ -189,6 +195,21 @@ class DatabaseManager:
             
             return result
         
+        finally:
+            session.close()
+    
+    def get_entry_by_date(self, date):
+        """Get entry object for a specific date for the current user"""
+        if not self.user_id:
+            return None
+        
+        session = self.get_session()
+        try:
+            entry = session.query(MentalHealthEntry).filter(
+                MentalHealthEntry.date == date,
+                MentalHealthEntry.user_id == self.user_id
+            ).first()
+            return entry
         finally:
             session.close()
     

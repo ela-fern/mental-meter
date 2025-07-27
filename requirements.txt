@@ -6,3 +6,4 @@ pdfplumber
 PyPDF2
 pytesseract
 sqlalchemy
+psycopg2-binary

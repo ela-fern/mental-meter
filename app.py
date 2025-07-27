@@ -6,6 +6,11 @@ from datetime import datetime, timedelta
 import os
 from database import DatabaseManager
 from scoring import PHQ9Scorer, GAD7Scorer
+import os
+from sqlalchemy import create_engine
+
+DATABASE_URL = os.getenv("DATABASE_URL")
+engine = create_engine(DATABASE_URL)
 
 def apply_custom_css():
     st.markdown("""
